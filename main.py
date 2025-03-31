@@ -1,3 +1,4 @@
+import contextlib
 import os
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse
@@ -8,6 +9,7 @@ from redis import asyncio as aioredis
 import logging
 from dotenv import load_dotenv
 import sentry_sdk
+
 
 load_dotenv(verbose=True)
 
@@ -24,12 +26,38 @@ sentry_sdk.init(
     profiles_sample_rate=1.0,
 )
 
-log = logging.getLogger(__name__)
+PYTHON_LOG_LEVEL = os.getenv("PYTHON_LOG_LEVEL", "DEBUG")
 
-PYTHON_LOG_LEVEL = os.getenv("PYTHON_LOG_LEVEL", "debug")
+log = logging.getLogger(__name__)
+log.setLevel(PYTHON_LOG_LEVEL)
+log.addHandler(logging.StreamHandler())
+
+
 REDIS_HOSTNAME = os.getenv("REDIS_HOSTNAME")
 REDIS_PORT = os.getenv("REDIS_PORT")
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
+
+
+@contextlib.asynccontextmanager
+async def lifespan(app):
+    """
+    Verify on startup
+    - all settings present
+    - connections are valid / work
+    See also https://www.starlette.io/lifespan/
+    """
+    assert PYTHON_LOG_LEVEL is not None
+    assert REDIS_HOSTNAME is not None
+    assert REDIS_PORT is not None
+    assert REDIS_PASSWORD is not None
+
+    redis = await aioredis.from_url(
+        f"redis://{REDIS_HOSTNAME}", password=REDIS_PASSWORD
+    )
+    redis_ping_success = await redis.ping()
+    log.debug(f"pinging redis host '{REDIS_HOSTNAME}' to verify connection")
+    assert redis_ping_success is True
+    yield
 
 
 async def redis_set_value(key, value):
@@ -58,4 +86,4 @@ if PYTHON_LOG_LEVEL.lower() == "debug":
 else:
     debuf = False
 
-app = Starlette(debug=debug, routes=routes)
+app = Starlette(debug=debug, routes=routes, lifespan=lifespan)
