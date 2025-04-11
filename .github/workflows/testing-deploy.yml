@@ -14,13 +14,13 @@ jobs:
   # This workflow contains a single job called "build"
   deploy-testing:
     name: Deploy testing Stripe Connect Account Announcer
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     environment: testing
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
@@ -53,7 +53,10 @@ jobs:
           ssh dokku@$DOKKU_HOST -C "dokku config:set --no-restart testing-stripe-connect-account-announcer REDIS_HOSTNAME=${{ secrets.REDIS_HOSTNAME }} REDIS_PORT=${{ secrets.REDIS_PORT }}"
           ssh dokku@$DOKKU_HOST -C "dokku config:set --no-restart testing-stripe-connect-account-announcer REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}"
           ssh dokku@$DOKKU_HOST -C "dokku ps:set testing-stripe-connect-account-announcer restart-policy unless-stopped"
-          ssh dokku@$DOKKU_HOST -C "dokku ps:rebuild testing-stripe-connect-account-announcer"
+          ssh dokku@$DOKKU_HOST -C "dokku git:sync --build testing-stripe-connect-account-announcer https://github.com/Subscribie/stripe-connect-account-announcer.git main"
+          ssh dokku@$DOKKU_HOST -C "dokku config:set --no-restart testing-stripe-connect-account-announcer DOKKU_LETSENCRYPT_EMAIL=${{ secrets.LETSENCRYPT_EMAIL }}"
+          ssh dokku@$DOKKU_HOST -C "dokku letsencrypt:enable testing-stripe-connect-account-announcer"
+          ssh dokku@$DOKKU_HOST -C "dokku letsencrypt:cron-job --add"
           
       - id: deploy
         name: Deploy to dokku
